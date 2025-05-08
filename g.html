@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Géolocalisation IP</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.1/dist/leaflet.css" />
+    <style>
+        /* Supprimer marges et padding de body pour éviter la bande blanche */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+        }
+
+        #map {
+            height: 100vh; /* La carte occupe toute la hauteur de la fenêtre */
+        }
+
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+            max-width: 300px; /* Limiter la taille de l'affichage */
+        }
+
+        #logo {
+            position: absolute;
+            top: 10px; /* Positionner le logo au-dessus de la carte */
+            right: 10px; /* Positionner le logo à droite */
+            z-index: 1100; /* S'assurer qu'il est au-dessus de la carte */
+            opacity: 0.5; /* Opacité de 50% */
+            max-width: 100px; /* Limiter la taille du logo */
+        }
+    </style>
+</head>
+<body>
+
+<!-- Ajout du logo avec une opacité de 50% -->
+<img id="logo" src="https://i.imgur.com/an788SS.png" alt="Logo">
+
+<div id="info">
+    <label for="ipInput">Entrez une IP :</label>
+    <input type="text" id="ipInput" placeholder="Exemple: 8.8.8.8">
+    <button onclick="geoLocaliserIP()">Géolocaliser</button>
+    <p id="locationInfo"></p>
+    <p id="statusCode"></p> <!-- Affichage du statut de la réponse -->
+    <p id="domainInfo"></p>
+    <p id="orgInfo"></p> <!-- Affichage de l'organisation (fournisseur) -->
+    <p id="ipType"></p> <!-- Affichage si l'IP est dynamique ou statique -->
+</div>
+
+<div id="map"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script> <!-- Chargement d'Axios -->
+<script src="https://unpkg.com/leaflet@1.9.1/dist/leaflet.js"></script>
+<script>
+    var map = L.map('map', {
+        center: [51.505, -0.09], // Position initiale
+        zoom: 2, // Niveau de zoom initial
+        minZoom: 2,  // Limite de zoom minimum
+        maxZoom: 18,  // Limite de zoom maximum
+        maxBounds: [
+            [-90, -180],  // Limites sud-ouest de la carte
+            [90, 180]     // Limites nord-est de la carte
+        ],  // Limites globales de la carte
+        maxBoundsViscosity: 1.0,  // Force la carte à ne pas sortir des limites définies
+        noWrap: true,  // Empêche la carte de se décaler horizontalement au-delà de ses limites
+        zoomControl: false,  // Désactive les contrôles de zoom (+ et -)
+        scrollWheelZoom: true  // Active le zoom avec la molette de la souris
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    var currentMarker = null;  // Variable pour stocker le marqueur actuel
+    var currentCircle = null;  // Variable pour stocker le cercle autour du point
+
+    function geoLocaliserIP() {
+        var ip = document.getElementById('ipInput').value;
+        var url = `http://ip-api.com/json/${ip}?fields=city,lat,lon,country,query,status,org`;
+
+        axios.get(url).then(function(response) {
+            // Affichage du code de statut HTTP réel
+            document.getElementById('statusCode').innerHTML = `Code de statut HTTP: ${response.status}`;
+
+            if(response.data.status === "fail") {
+                alert("Impossible de géolocaliser cette IP.");
+                document.getElementById('locationInfo').innerHTML = "Aucune donnée géographique trouvée pour cette IP.";
+                return;
+            }
+
+            var lat = response.data.lat;
+            var lon = response.data.lon;
+            var city = response.data.city;
+            var country = response.data.country;
+            var domain = response.data.query; // L'adresse IP ou le domaine
+            var org = response.data.org; // L'organisation (fournisseur)
+
+            // Supposons que les ISP avec "mobile" dans leur nom soient des IPs dynamiques
+            var ipType = "Statique";  // Par défaut, on suppose que l'IP est statique
+            if (org && org.toLowerCase().includes("mobile")) {
+                ipType = "Dynamique";  // Estimation des IPs dynamiques pour les opérateurs mobiles
+            }
+
+            // Si un marqueur existe déjà, le supprimer
+            if (currentMarker) {
+                map.removeLayer(currentMarker);
+            }
+
+            // Si un cercle existe déjà, le supprimer
+            if (currentCircle) {
+                map.removeLayer(currentCircle);
+            }
+
+            // Affichage des informations
+            document.getElementById('locationInfo').innerHTML = `Ville: ${city}<br>Latitude: ${lat}<br>Longitude: ${lon}<br>Pays: ${country}`;
+            document.getElementById('domainInfo').innerHTML = `Domaine/IP: ${domain}`;
+            document.getElementById('orgInfo').innerHTML = `Org: ${org}`; // Affichage de l'organisation (fournisseur)
+            document.getElementById('ipType').innerHTML = `Type de l'IP: ${ipType}`;  // Affichage si l'IP est dynamique ou statique
+
+            // Ajouter un nouveau marqueur sur la carte
+            currentMarker = L.marker([lat, lon]).addTo(map);
+
+            // Ajouter un cercle autour de la géolocalisation
+            currentCircle = L.circle([lat, lon], {
+                color: 'blue',
+                fillColor: 'blue',
+                fillOpacity: 0.2,
+                radius: 5000  // Rayon de 50 km (ajustez selon vos besoins)
+            }).addTo(map);
+
+            // Ajuster la vue pour ne pas sortir de la carte
+            map.setView([lat, lon], 10, {animate: true});
+        }).catch(function(error) {
+            alert("Erreur avec l'API.");
+            document.getElementById('statusCode').innerHTML = "Erreur lors de la récupération des données.";
+        });
+    }
+</script>
+
+</body>
+</html>
