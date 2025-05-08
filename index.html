@@ -75,7 +75,7 @@
 
   function geoLocaliserIP() {
     const ip = document.getElementById('ipInput').value;
-    const url = `http://ip-api.com/json/${ip}?fields=city,lat,lon,country,query,status,org`;
+    const url = `https://ip-api.com/json/${ip}?fields=city,lat,lon,country,query,status,org`;
 
     axios.get(url).then(response => {
       document.getElementById('statusCode').innerHTML = `Code HTTP: ${response.status}`;
